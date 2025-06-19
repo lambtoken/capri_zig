@@ -28,7 +28,6 @@ pub fn printError(source: []const u8, tk: token.Token, err: anyerror, ahead: boo
 
     const ln_margin = try std.heap.page_allocator.alloc(u8, ln_len + 4);
     @memset(ln_margin, ' ');
-    errdefer std.heap.page_allocator.free(ln_margin);
     defer std.heap.page_allocator.free(ln_margin);
 
     const highlight_pos = if (ahead) tk.column + tk.value.len else tk.column;
