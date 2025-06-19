@@ -1,7 +1,7 @@
 const std =  @import("std");
 const token = @import("token.zig");
 
-pub fn printError(source: []const u8, tk: token.Token, err: anyerror, ahead: bool) void {
+pub fn printError(source: []const u8, tk: token.Token, err: anyerror, ahead: bool) !void {
     var lines = std.mem.splitAny(u8, source, "\n");
 
     std.debug.print("Error at line {d}, column {d}: {any}\n", .{
@@ -13,19 +13,31 @@ pub fn printError(source: []const u8, tk: token.Token, err: anyerror, ahead: boo
     var i: usize = 0;
     while (lines.next()) |line| {
         if (i == tk.line) {
-            std.debug.print("{s}\n", .{line});
+            std.debug.print(" {d} | {s}\n", .{i, line});
             break;
         }
         i += 1;
     }
 
-    const highlight_pos = if (ahead) tk.column + 2 else tk.column;
+    // get the length of the line number
+    var x = i + 1;
+    var ln_len: u32 = 1;
+    while (x >= 10) : (x /= 10) {
+        ln_len += 1;
+    }
+
+    const ln_margin = try std.heap.page_allocator.alloc(u8, ln_len + 4);
+    @memset(ln_margin, ' ');
+    errdefer std.heap.page_allocator.free(ln_margin);
+    defer std.heap.page_allocator.free(ln_margin);
+
+    const highlight_pos = if (ahead) tk.column + tk.value.len else tk.column;
     const highlight_len = if (ahead) 1 else tk.value.len;
 
     var buf: [256]u8 = undefined;
     @memset(buf[0..highlight_pos], ' ');
     @memset(buf[highlight_pos..highlight_pos + highlight_len], '^');
-    std.debug.print("{s}\n", .{buf[0..highlight_pos + highlight_len]});
+    std.debug.print("{s}{s}\n", .{ln_margin, buf[0..highlight_pos + highlight_len]});
 }
 
 test "unexpected token error" {
@@ -38,7 +50,7 @@ test "unexpected token error" {
     };
     const err: anyerror = error.UnexpectedToken;
     
-    printError(source, tk, err, false);
+    try printError(source, tk, err, false);
 }
 
 test "unexpected long token error" {
@@ -51,7 +63,7 @@ test "unexpected long token error" {
     };
     const err: anyerror = error.UnexpectedToken;
 
-    printError(source, tk, err, false);
+    try printError(source, tk, err, false);
 }
 
 test "expected token error" {
@@ -64,5 +76,5 @@ test "expected token error" {
     };
     const err: anyerror = error.ExpectedToken;
 
-    printError(source, tk, err, true);
+    try printError(source, tk, err, true);
 }
