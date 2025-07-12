@@ -161,5 +161,3 @@ pub fn tokenize(allocator: std.mem.Allocator, buffer: []const u8) ![]Token {
     try tokens.append(Token{ .ttype = TokenType.eof, .value = "" });
     return tokens.toOwnedSlice();
 }
-
-// TODO: Implement other helpers as needed

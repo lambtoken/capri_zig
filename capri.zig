@@ -1,7 +1,11 @@
 const std = @import("std");
 const token = @import("token.zig");
+const bump = @import("bump.zig");
 
 pub fn main() !void {
+    const bump_allocator = bump.init(std.heap.page_allocator);
+    defer bump_allocator.freeBump(bump_allocator);
+
     const allocator = std.heap.page_allocator;
     var args = std.process.args();
     defer args.deinit();
