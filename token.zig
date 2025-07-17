@@ -1,8 +1,9 @@
 const std = @import("std");
 const bump = @import("./bump.zig");
+const Error = @import("error.zig");
 
 pub const TokenType = enum {
-    nope,
+    nothing,
     bool,
     int,
     float,
@@ -10,11 +11,13 @@ pub const TokenType = enum {
     string,
     mut,
     fun,
+    struct_,
     assign,
     plus,
     minus,
     divide,
     multiply,
+    modulus,
     left_paren,
     right_paren,
     left_curly,
@@ -23,6 +26,9 @@ pub const TokenType = enum {
     quotes,
     d_quotes,
     if_,
+    not,
+    and_,
+    or_,
     for_,
     in_,
     range,
@@ -39,14 +45,11 @@ pub const Token = struct {
     column: usize = 0,
 };
 
-// pub fn readFile(path: []const u8, buffer: []u8) ![]u8 {
-//     var file = try std.fs.cwd().openFile(path, .{});
-//     defer file.close();
-//     var size =  try file.getEndPos();
-//     const buffer = try bump.alloc(allocator, size);
-//     return try file.readAll(buffer);
-//     return try file.readToEndAlloc(allocator, std.math.maxInt(usize));
-// }
+pub fn readFile(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    var file = try std.fs.cwd().openFile(path, .{});
+    defer file.close();
+    return try file.readToEndAlloc(allocator, std.math.maxInt(usize));
+}
 
 pub fn printTokens(tokens: []Token) void {
     for (tokens) |token| {
@@ -55,29 +58,33 @@ pub fn printTokens(tokens: []Token) void {
     }
 }
 
+const keywords_lookup = .{
+    .{ "nothing", TokenType.nothing },
+    .{ "true", TokenType.bool },
+    .{ "false", TokenType.bool },
+    .{ "mut", TokenType.mut },
+    .{ "fun", TokenType.fun },
+    .{ "struct", TokenType.struct_ },
+    .{ "if", TokenType.if_ },
+    .{ "not", TokenType.not },
+    .{ "and", TokenType.and_ },
+    .{ "or", TokenType.or_ },
+    .{ "for", TokenType.for_ },
+    .{ "in", TokenType.in_ },
+    .{ "return", TokenType.return_ },
+};
+
 pub inline fn handleKeyword(buffer: []const u8, i: *usize, tokens: *std.ArrayList(Token)) !void {
     const start = i.*;
-    while (i.* < buffer.len and std.ascii.isAlphanumeric(buffer[i.*])) : (i.* += 1) {}
+    while (i.* < buffer.len and (std.ascii.isAlphanumeric(buffer[i.*]) or buffer[i.*] == '_')) : (i.* += 1) {}
     const value = buffer[start..i.*];
     var ttype = TokenType.word;
-    if (std.mem.eql(u8, value, "nope")) {
-        ttype = TokenType.nope;
-    } else if (std.mem.eql(u8, value, "true") or std.mem.eql(u8, value, "false")) {
-        ttype = TokenType.bool;
-    } else if (std.mem.eql(u8, value, "mut")) {
-        ttype = TokenType.mut;
-    } else if (std.mem.eql(u8, value, "fun")) {
-        ttype = TokenType.fun;
-    } else if (std.mem.eql(u8, value, "if")) {
-        ttype = TokenType.if_;
-    } else if (std.mem.eql(u8, value, "for")) {
-        ttype = TokenType.for_;
-    } else if (std.mem.eql(u8, value, "in")) {
-        ttype = TokenType.in_;
-    } else if (std.mem.eql(u8, value, "return")) {
-        ttype = TokenType.return_;
-    } else {
-        ttype = TokenType.word;
+
+    inline for (keywords_lookup) |keyword| {
+        if (std.mem.eql(u8, value, keyword[0])) {
+            ttype = keyword[1];
+            break;
+        }
     }
 
     try tokens.append(Token{ .ttype = ttype, .value = value });
@@ -89,9 +96,9 @@ pub fn tokenize(allocator: std.mem.Allocator, buffer: []const u8) ![]Token {
     var i: usize = 0;
     while (i < buffer.len) : (i += 1) {
         const c = buffer[i];
-        // Handle range operator before float/int
+        // this sucks because '....' passes as 2 range ops. should return an error
         if (c == '.' and i + 1 < buffer.len and buffer[i + 1] == '.') {
-            try tokens.append(Token{ .ttype = TokenType.range, .value = buffer[i..i+2] });
+            try tokens.append(Token{ .ttype = TokenType.range, .value = buffer[i .. i + 2] });
             i += 1;
             continue;
         } else if (std.ascii.isDigit(c) or (c == '.' and i + 1 < buffer.len and buffer[i + 1] != '.' and std.ascii.isDigit(buffer[i + 1]))) {
@@ -101,11 +108,17 @@ pub fn tokenize(allocator: std.mem.Allocator, buffer: []const u8) ![]Token {
                 has_dot = true;
                 i += 1;
             }
-            while (i < buffer.len and (std.ascii.isDigit(buffer[i]) or (buffer[i] == '.' and !has_dot and (i + 1 >= buffer.len or buffer[i + 1] != '.')))) : (i += 1) {
+
+            while(i < buffer.len and std.ascii.isDigit(buffer[i]) or buffer[i] == '.') : (i += 1) {
                 if (buffer[i] == '.') {
-                    has_dot = true;
+                    if (!has_dot) {
+                        has_dot = true;
+                    } else {
+                        return error.InvalidNumber;
+                    }
                 }
             }
+
             const value = buffer[start..i];
             const kind = if (has_dot) TokenType.float else TokenType.int;
             try tokens.append(Token{ .ttype = kind, .value = value });
@@ -128,29 +141,45 @@ pub fn tokenize(allocator: std.mem.Allocator, buffer: []const u8) ![]Token {
                     try tokens.append(Token{ .ttype = TokenType.string, .value = buffer[start..end] });
                     i = end;
                 },
-                '@' => try tokens.append(Token{ .ttype = TokenType.builtin, .value = buffer[i..i+1] }),
-                ',' => try tokens.append(Token{ .ttype = TokenType.comma, .value = buffer[i..i+1] }),
-                '+' => try tokens.append(Token{ .ttype = TokenType.plus, .value = buffer[i..i+1] }),
-                '-' => try tokens.append(Token{ .ttype = TokenType.minus, .value = buffer[i..i+1] }),
-                '*' => try tokens.append(Token{ .ttype = TokenType.multiply, .value = buffer[i..i+1] }),
+                '"' => {
+                    const start = i + 1;
+                    var end = start;
+                    while (end < buffer.len and buffer[end] != '"') : (end += 1) {}
+                    if (end >= buffer.len) return error.UnterminatedString;
+                    try tokens.append(Token{ .ttype = TokenType.string, .value = buffer[start..end] });
+                    i = end;
+                },
+                '@' => {
+                    const start = i + 1;
+                    var end = start;
+                    while (end < buffer.len and std.ascii.isAlphanumeric(buffer[end])) : (end += 1) {}
+                    const name = buffer[start..end];
+                    try tokens.append(Token{ .ttype = TokenType.builtin, .value = name });
+                    i = end - 1;
+                },
+                ',' => try tokens.append(Token{ .ttype = TokenType.comma, .value = buffer[i .. i + 1] }),
+                '+' => try tokens.append(Token{ .ttype = TokenType.plus, .value = buffer[i .. i + 1] }),
+                '-' => try tokens.append(Token{ .ttype = TokenType.minus, .value = buffer[i .. i + 1] }),
+                '*' => try tokens.append(Token{ .ttype = TokenType.multiply, .value = buffer[i .. i + 1] }),
                 '/' => {
                     if (i + 1 < buffer.len and buffer[i + 1] == '/') {
                         i += 2;
                         while (i < buffer.len and buffer[i] != '\n') : (i += 1) {}
                     } else {
-                        try tokens.append(Token{ .ttype = TokenType.divide, .value = buffer[i..i+1] });
+                        try tokens.append(Token{ .ttype = TokenType.divide, .value = buffer[i .. i + 1] });
                     }
                 },
-                '(' => try tokens.append(Token{ .ttype = TokenType.left_paren, .value = buffer[i..i+1] }),
-                ')' => try tokens.append(Token{ .ttype = TokenType.right_paren, .value = buffer[i..i+1] }),
-                '{' => try tokens.append(Token{ .ttype = TokenType.left_curly, .value = buffer[i..i+1] }),
-                '}' => try tokens.append(Token{ .ttype = TokenType.right_curly, .value = buffer[i..i+1] }),
-                '=' => try tokens.append(Token{ .ttype = TokenType.assign, .value = buffer[i..i+1] }),
-                '|' => try tokens.append(Token{ .ttype = TokenType.pipe, .value = buffer[i..i+1] }),
+                '%' => try tokens.append(Token{ .ttype = TokenType.modulus, .value = buffer[i .. i + 1] }),
+                '(' => try tokens.append(Token{ .ttype = TokenType.left_paren, .value = buffer[i .. i + 1] }),
+                ')' => try tokens.append(Token{ .ttype = TokenType.right_paren, .value = buffer[i .. i + 1] }),
+                '{' => try tokens.append(Token{ .ttype = TokenType.left_curly, .value = buffer[i .. i + 1] }),
+                '}' => try tokens.append(Token{ .ttype = TokenType.right_curly, .value = buffer[i .. i + 1] }),
+                '=' => try tokens.append(Token{ .ttype = TokenType.assign, .value = buffer[i .. i + 1] }),
+                '|' => try tokens.append(Token{ .ttype = TokenType.pipe, .value = buffer[i .. i + 1] }),
                 '.' => {
                     if (i + 1 < buffer.len and buffer[i + 1] == '.') {
                         std.debug.print("we should be here\n", .{});
-                        try tokens.append(Token{ .ttype = TokenType.range, .value = buffer[i..i+2] });
+                        try tokens.append(Token{ .ttype = TokenType.range, .value = buffer[i .. i + 2] });
                         i += 1;
                     }
                 },

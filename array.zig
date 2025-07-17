@@ -1,12 +1,13 @@
-const std =  @import("std");
-const gc = @import("gc.zig");
+const std = @import("std");
+const Value = @import("interpreter.zig").Value;
+const env = @import("env.zig");
 
-const Array = struct {
-    values: std.ArrayList(gc.Value),
+pub const Array = struct {
+    values: std.ArrayList(*env.EnvEntry),
 
     pub fn init(allocator: std.mem.Allocator) !Array {
         return Array{
-            .values = try std.ArrayList(gc.Value).initCapacity(allocator, 16),
+            .values = try std.ArrayList(*env.EnvEntry).initCapacity(allocator, 16),
         };
     }
 
@@ -14,7 +15,7 @@ const Array = struct {
         self.values.deinit();
     }
 
-    pub fn append(self: *Array, value: gc.Value) !void {
+    pub fn append(self: *Array, value: *env.EnvEntry) !void {
         try self.values.append(value);
     }
 
@@ -22,7 +23,7 @@ const Array = struct {
         return self.values.items.len;
     }
 
-    pub fn at(self: *Array, index: usize) gc.Value {
+    pub fn at(self: *Array, index: usize) *env.EnvEntry {
         return self.values.items[index];
     }
 };
@@ -35,11 +36,23 @@ test "Array" {
     try std.testing.expectEqual(0, array.len());
     defer array.deinit();
 
-    try array.append(gc.Value{ .data = .{ .number = 42 }, .is_mutable = false });
+    try array.append(@constCast(&env.EnvEntry{
+        .value = @constCast(&Value{ .number = 42 }),
+        .is_mutable = false,
+        .reachable = true,
+    }));
     try std.testing.expectEqual(1, array.len());
-    try std.testing.expect(std.meta.eql(gc.Value{ .data = .{ .number = 42 }, .is_mutable = false }, array.at(0)));
 
-    try array.append(gc.Value{ .data = .{ .number = 100 }, .is_mutable = false });
+    const entryAt0 = array.at(0);
+    try std.testing.expectEqual(42, entryAt0.value.*.number);
+
+    try array.append(@constCast(&env.EnvEntry{
+        .value = @constCast(&Value{ .number = 100 }),
+        .is_mutable = false,
+        .reachable = true,
+    }));
     try std.testing.expectEqual(2, array.len());
-    try std.testing.expect(std.meta.eql(gc.Value{ .data = .{ .number = 100 }, .is_mutable = false }, array.at(1)));
+
+    const entryAt1 = array.at(1);
+    try std.testing.expectEqual(100, entryAt1.value.*.number);
 }

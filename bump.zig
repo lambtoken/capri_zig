@@ -2,60 +2,72 @@ const std = @import("std");
 
 pub const Bump = struct {
     allocator: std.mem.Allocator,
-    memory: []u8,
-    capacity: usize,
-    canGrow: bool,
+    chunks: std.ArrayList([]u8),
+    init_chunk_size: usize,
+    current_chunk_size: usize,
+    current_chunk: usize,
     used: usize,
 };
 
-// caller must free the memory
-pub fn newBump(allocator: std.mem.Allocator, initialCapacity: usize, canGrow: bool) !*Bump {
-    const mem = try allocator.alloc(u8, initialCapacity);
-    
-    const b = try allocator.create(Bump);
+pub fn newBump(allocator: std.mem.Allocator, chunk_size: usize) !*Bump {
+    var chunks = std.ArrayList([]u8).init(allocator);
+    const first_chunk = try allocator.alloc(u8, chunk_size);
+    try chunks.append(first_chunk);
 
+    const b = try allocator.create(Bump);
     b.* = .{
         .allocator = allocator,
-        .memory = mem,
-        .capacity = initialCapacity,
-        .canGrow = canGrow,
-        .used = 0
+        .chunks = chunks,
+        .init_chunk_size = chunk_size,
+        .current_chunk_size = chunk_size,
+        .current_chunk = 0,
+        .used = 0,
     };
-
     return b;
 }
 
 pub fn freeBump(b: *Bump) void {
-    if (b.memory.len != 0) {
-        b.allocator.free(b.memory);
+    for (b.chunks.items) |chunk| {
+        b.allocator.free(chunk);
     }
+    b.chunks.deinit();
     b.allocator.destroy(b);
 }
 
 pub fn alloc(b: *Bump, comptime T: type, count: usize) ![]T {
-    const alignment: usize = @as(usize, @alignOf(T));
-    const size: usize = count * @sizeOf(T);
+    const alignment = @alignOf(T);
+    const size = count * @sizeOf(T);
 
     const alignment_start = std.mem.alignForward(usize, b.used, alignment);
     const alignment_end = alignment_start + size;
 
-    if (alignment_end > b.capacity) {
-        if (!b.canGrow) return error.OutOfMemory;
-        try growBump(b, b.capacity * 2);
+    if (alignment_end > b.current_chunk_size) {
+        const chunk_size = if (size > b.init_chunk_size) size else b.init_chunk_size;
+        const new_chunk = try b.allocator.alloc(u8, chunk_size);
+        try b.chunks.append(new_chunk);
+        b.current_chunk = b.chunks.items.len - 1;
+        b.current_chunk_size = chunk_size;
+        b.used = 0;
+        return alloc(b, T, count);
     }
 
-    b.used = alignment_end;
-    const memory_slice = b.memory[alignment_start..alignment_end];
+    if (alignment_end > b.current_chunk_size - b.used) {
+        const new_chunk = try b.allocator.alloc(u8, b.init_chunk_size);
+        try b.chunks.append(new_chunk);
+        b.current_chunk = b.chunks.items.len - 1;
+        b.used = 0;
+        return alloc(b, T, count);
+    }
 
-    const ptr: [*]T =  @ptrCast(@alignCast(memory_slice));
+    const current_chunk = b.chunks.items[b.current_chunk];
+    const memory_slice = current_chunk[alignment_start..alignment_end];
+    b.used = alignment_end;
+
+    const ptr: [*]T = @ptrCast(@alignCast(memory_slice));
+
+    if (@intFromPtr(ptr) % alignment != 0) unreachable;
     return ptr[0..count];
 }
-
-// fn allocAligned(b: *Bump, comptime T: type, size: usize) ![]T {
-//     const bytes = size * @sizeOf(T);
-//     const raw = try alloc(b, T, bytes);
-//     return @ptrCast(raw.ptr);
-// }
 
 fn growBump(b: *Bump, newCapacity: usize) !void {
     if (!b.canGrow) return error.OutOfMemory;
@@ -79,41 +91,40 @@ pub fn copy_slice(b: *Bump, slice: []const u8) ![]u8 {
     return mem;
 }
 
-//test example
+// test example
 test "bump allocator" {
     const allocator = std.testing.allocator;
-    var b = try newBump(allocator, 48, true);
+    var b = try newBump(allocator, 48);
     defer freeBump(b);
 
     const data1 = try alloc(b, u8, 32);
     @memset(data1, 0xAA);
-    try std.testing.expectEqualSlices(u8, b.memory[0..32], data1);
-    
+
     const data2 = try alloc(b, u8, 16);
     @memset(data2, 0xBB);
-    try std.testing.expectEqualSlices(u8, b.memory[32..48], data2);
+
+    try std.testing.expectEqualSlices(u8, b.chunks.items[0][0..32], data1);
+    try std.testing.expectEqualSlices(u8, b.chunks.items[1][0..16], data2);
 }
 
-// // The bump allocator can grow, so we can allocate more than the initial capacity
+// The bump allocator can grow, so we can allocate more than the initial capacity
 test "bump allocator grows" {
     const allocator = std.testing.allocator;
-    var b = try newBump(allocator, 64, true);
+    var b = try newBump(allocator, 64);
     defer freeBump(b);
 
     const data1 = try alloc(b, u8, 64);
     @memset(data1, 0xCC);
-    try std.testing.expectEqualSlices(
-        u8, b.memory[0..64], data1
-    );
-    
+    try std.testing.expectEqualSlices(u8, b.chunks.items[0][0..64], data1);
+
     const data2 = try alloc(b, u8, 64);
     @memset(data2, 0xDD);
-    try std.testing.expectEqualSlices(u8, b.memory[64..128], data2);
+    try std.testing.expectEqualSlices(u8, b.chunks.items[1][0..64], data2);
 }
 
 test "struct creation" {
     const allocator = std.testing.allocator;
-    const b = try newBump(allocator, 32, true);
+    const b = try newBump(allocator, 32);
     defer freeBump(b);
 
     const MyStruct = struct {
@@ -131,11 +142,23 @@ test "struct creation" {
 
 test "slice copy" {
     const allocator = std.testing.allocator;
-    const b = try newBump(allocator, 32, true);
+    const b = try newBump(allocator, 32);
     defer freeBump(b);
 
     const slice = "HEYO!";
     const copied = try copy_slice(b, slice);
 
     try std.testing.expectEqualSlices(u8, slice, copied);
+}
+
+test "large allocation" {
+    const allocator = std.testing.allocator;
+    var b = try newBump(allocator, 64);
+    defer freeBump(b);
+
+    const large_data = try alloc(b, u8, 100); // 10MB
+    @memset(large_data, 0xEE);
+    try std.testing.expectEqual(b.chunks.items.len, 2);
+    try std.testing.expectEqual(b.used, 100);
+    try std.testing.expectEqualSlices(u8, b.chunks.items[1][0..100], large_data);
 }

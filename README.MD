@@ -12,8 +12,8 @@ There was already a C version of Capri but I did not manage to finish it
 - Parser [/]
     - Binary operations with precedence [✔]
     - Var declaration [✔]
-    - Branching [ ]
-    - For/While loops [ ]
+    - Branching [/]
+    - For/While loops [/]
     ...
 - Interpreter [ ]
 - Builtins [/]

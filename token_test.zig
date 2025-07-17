@@ -69,7 +69,7 @@ test "floats" {
     try std.testing.expectEqual(token.TokenType.eof, tokens[3].ttype);
 }
 
-test "range" {
+test "tokenize range" {
     const allocator = std.testing.allocator;
     const input = "1..10";
     const tokens = try token.tokenize(allocator, input);
@@ -84,7 +84,7 @@ test "range" {
     try std.testing.expectEqualStrings("10", tokens[2].value);
 }
 
-test "comment" {
+test "tokenize comment" {
     const allocator = std.testing.allocator;
     const input = "// This is a comment\nvar x = 42";
     const tokens = try token.tokenize(allocator, input);
@@ -97,4 +97,19 @@ test "comment" {
     try std.testing.expectEqual(token.TokenType.int, tokens[3].ttype);
     try std.testing.expectEqualStrings("42", tokens[3].value);
     try std.testing.expectEqual(token.TokenType.eof, tokens[4].ttype);
+}
+
+test "tokenize not and or" {
+    const allocator = std.testing.allocator;
+    const input = "not true and false or maybe";
+    const tokens = try token.tokenize(allocator, input);
+    defer allocator.free(tokens);
+
+    try std.testing.expectEqual(7, tokens.len);
+    try std.testing.expectEqualStrings("not", tokens[0].value);
+    try std.testing.expectEqual(token.TokenType.not, tokens[0].ttype);
+    try std.testing.expectEqualStrings("and", tokens[2].value);
+    try std.testing.expectEqual(token.TokenType.and_, tokens[2].ttype);
+    try std.testing.expectEqualStrings("or", tokens[4].value);
+    try std.testing.expectEqual(token.TokenType.or_, tokens[4].ttype);
 }

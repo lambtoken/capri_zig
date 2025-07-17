@@ -1,0 +1,25 @@
+mut a = 1 + 2 + 3 * 100 + 101
+
+if a {
+    @print("a found! its", a)
+}
+
+if nothing {
+    @print("This wont print!")
+}
+
+some_str = "Hello, world!"
+
+if some_str {
+    @print("some_str exists! its ", some_str)
+}
+
+@print(something)
+
+i = 1
+
+for x in 0 .. 10 {
+    for y in 0 .. 10 {
+        @print(x, y, x * y)
+    }
+}

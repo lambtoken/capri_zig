@@ -1,11 +1,10 @@
 const std = @import("std");
 const token = @import("token.zig");
+const parse = @import("parse.zig");
+const interpreter = @import("interpreter.zig");
 const bump = @import("bump.zig");
 
 pub fn main() !void {
-    const bump_allocator = bump.init(std.heap.page_allocator);
-    defer bump_allocator.freeBump(bump_allocator);
-
     const allocator = std.heap.page_allocator;
     var args = std.process.args();
     defer args.deinit();
@@ -19,7 +18,28 @@ pub fn main() !void {
     const text = try token.readFile(allocator, script);
     defer allocator.free(text);
 
-    // TODO: Tokenize and interpret
-    // let tokens = token.tokenize(text, allocator);
-    // token.printTokens(tokens);
+    // Tokenize
+    const tokens = try token.tokenize(allocator, text);
+    defer allocator.free(tokens);
+
+    // for (tokens) |tok| {
+    //     std.debug.print("{s}: {s}\n", .{ @tagName(tok.ttype), tok.value });
+    // }
+
+    // Create bump allocator for AST nodes
+    const _bump = try bump.newBump(
+        allocator,
+        1024,
+    );
+    defer bump.freeBump(_bump);
+
+    // Parse
+    var parser = parse.Parser.init(_bump, tokens);
+    const ast = try parser.parseProgram();
+
+    // Interpret
+    const interp = try interpreter.Interpreter.init(allocator);
+    defer interp.deinit();
+
+    _ = try interp.evaluate(ast);
 }

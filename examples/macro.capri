@@ -5,3 +5,9 @@ list! () {
 arr = [a, 6, 7]
 
 @print(arr)
+
+printer! (a, n) {
+    for 0..n {
+        @print(a)
+    }
+}
