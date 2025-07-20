@@ -1,0 +1,8 @@
+str1 = "hello"
+str2 = "world!"
+str3 = ""
+
+@println("Length of 'hello':", @len(str1))
+@println("Length of 'world!':", @len(str2))
+@println("Length of empty string:", @len(str3))
+@println("Length of literal 'testing':", @len("testing")) 

@@ -74,7 +74,7 @@ test "tokenize range" {
     const input = "1..10";
     const tokens = try token.tokenize(allocator, input);
     defer allocator.free(tokens);
-    
+
     try std.testing.expectEqual(4, tokens.len);
     try std.testing.expectEqual(token.TokenType.int, tokens[0].ttype);
     try std.testing.expectEqualStrings("1", tokens[0].value);
@@ -112,4 +112,40 @@ test "tokenize not and or" {
     try std.testing.expectEqual(token.TokenType.and_, tokens[2].ttype);
     try std.testing.expectEqualStrings("or", tokens[4].value);
     try std.testing.expectEqual(token.TokenType.or_, tokens[4].ttype);
+}
+
+test "comparison operators" {
+    const allocator = std.testing.allocator;
+    const input = "1 < 2 > 3 <= 4 >= 5 == 6 != 7";
+    const tokens = try token.tokenize(allocator, input);
+    defer allocator.free(tokens);
+
+    try std.testing.expectEqual(14, tokens.len);
+    try std.testing.expectEqual(token.TokenType.int, tokens[0].ttype);
+    try std.testing.expectEqualStrings("1", tokens[0].value);
+    try std.testing.expectEqual(token.TokenType.lt, tokens[1].ttype);
+    try std.testing.expectEqualStrings("<", tokens[1].value);
+    try std.testing.expectEqual(token.TokenType.int, tokens[2].ttype);
+    try std.testing.expectEqualStrings("2", tokens[2].value);
+    try std.testing.expectEqual(token.TokenType.gt, tokens[3].ttype);
+    try std.testing.expectEqualStrings(">", tokens[3].value);
+    try std.testing.expectEqual(token.TokenType.int, tokens[4].ttype);
+    try std.testing.expectEqualStrings("3", tokens[4].value);
+    try std.testing.expectEqual(token.TokenType.le, tokens[5].ttype);
+    try std.testing.expectEqualStrings("<=", tokens[5].value);
+    try std.testing.expectEqual(token.TokenType.int, tokens[6].ttype);
+    try std.testing.expectEqualStrings("4", tokens[6].value);
+    try std.testing.expectEqual(token.TokenType.ge, tokens[7].ttype);
+    try std.testing.expectEqualStrings(">=", tokens[7].value);
+    try std.testing.expectEqual(token.TokenType.int, tokens[8].ttype);
+    try std.testing.expectEqualStrings("5", tokens[8].value);
+    try std.testing.expectEqual(token.TokenType.eq, tokens[9].ttype);
+    try std.testing.expectEqualStrings("==", tokens[9].value);
+    try std.testing.expectEqual(token.TokenType.int, tokens[10].ttype);
+    try std.testing.expectEqualStrings("6", tokens[10].value);
+    try std.testing.expectEqual(token.TokenType.ne, tokens[11].ttype);
+    try std.testing.expectEqualStrings("!=", tokens[11].value);
+    try std.testing.expectEqual(token.TokenType.int, tokens[12].ttype);
+    try std.testing.expectEqualStrings("7", tokens[12].value);
+    try std.testing.expectEqual(token.TokenType.eof, tokens[13].ttype);
 }

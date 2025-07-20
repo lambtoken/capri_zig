@@ -3,6 +3,7 @@ const parse = @import("parse.zig");
 const bump = @import("bump.zig");
 const env = @import("env.zig");
 const Array = @import("array.zig").Array;
+const Builtin = @import("builtin.zig");
 
 pub const Value = union(enum) {
     number: f64,
@@ -10,11 +11,7 @@ pub const Value = union(enum) {
     string: []const u8,
     array: *Array,
     nothing: void,
-    builtin: BuiltinFunction,
-};
-
-pub const BuiltinFunction = enum {
-    print,
+    builtin: Builtin.BuiltinType,
 };
 
 pub const Interpreter = struct {
@@ -41,12 +38,6 @@ pub const Interpreter = struct {
         self.stack.deinit();
         self.allocator.destroy(self);
     }
-
-    // split the following into separate functions
-    // one for primitives
-    // one for binary operations
-    // one for variable declarations
-    // one for function calls
 
     pub fn evaluate(self: *Interpreter, node: *parse.ASTNode) anyerror!Value {
         return switch (node.*) {
@@ -112,6 +103,72 @@ pub const Interpreter = struct {
                             return error.TypeError;
                         }
                     },
+                    .eq => {
+                        if (left == .number and right == .number) {
+                            return Value{ .boolean = left.number == right.number };
+                        } else {
+                            std.debug.print("Error: cannot compare non-numbers\n", .{});
+                            return error.TypeError;
+                        }
+                    },
+                    .lt => {
+                        if (left == .number and right == .number) {
+                            return Value{ .boolean = left.number < right.number };
+                        } else {
+                            std.debug.print("Error: cannot compare non-numbers\n", .{});
+                            return error.TypeError;
+                        }
+                    },
+                    .gt => {
+                        if (left == .number and right == .number) {
+                            return Value{ .boolean = left.number > right.number };
+                        } else {
+                            std.debug.print("Error: cannot compare non-numbers\n", .{});
+                            return error.TypeError;
+                        }
+                    },
+                    .le => {
+                        if (left == .number and right == .number) {
+                            return Value{ .boolean = left.number <= right.number };
+                        } else {
+                            std.debug.print("Error: cannot compare non-numbers\n", .{});
+                            return error.TypeError;
+                        }
+                    },
+                    .ge => {
+                        if (left == .number and right == .number) {
+                            return Value{ .boolean = left.number >= right.number };
+                        } else {
+                            std.debug.print("Error: cannot compare non-numbers\n", .{});
+                            return error.TypeError;
+                        }
+                    },
+                    .ne => {
+                        if (left == .number and right == .number) {
+                            return Value{ .boolean = left.number != right.number };
+                        } else {
+                            std.debug.print("Error: cannot compare non-numbers\n", .{});
+                            return error.TypeError;
+                        }
+                    },
+                    .and_ => {
+                        const l = self.isTruthy(left);
+                        const r = self.isTruthy(right);
+                        if (l and r) {
+                            return Value{ .boolean = true };
+                        } else {
+                            return Value{ .boolean = false };
+                        }
+                    },
+                    .or_ => {
+                        const l = self.isTruthy(left);
+                        const r = self.isTruthy(right);
+                        if (l or r) {
+                            return Value{ .boolean = true };
+                        } else {
+                            return Value{ .boolean = false };
+                        }
+                    },
                 };
             },
             .var_decl => |decl| {
@@ -132,6 +189,7 @@ pub const Interpreter = struct {
                     return try self.evaluate(if_stmt.then_stmt);
                 } else {
                     return Value{ .nothing = {} };
+                    // TODO: Do else branching
                     // return try self.evaluate(if_stmt.else_stmt);
                 }
             },
@@ -152,16 +210,33 @@ pub const Interpreter = struct {
         };
     }
 
-    fn evaluateBuiltinCall(self: *Interpreter, name: []const u8, args: *parse.ASTNode) anyerror!Value {
-        if (std.mem.eql(u8, name, "print")) {
-            return try self.evaluatePrint(args);
+    fn evaluateBuiltinCall(self: *Interpreter, name: []const u8, args_node: *parse.ASTNode) anyerror!Value {
+        const builtin = Builtin.getBuiltin(name) orelse {
+            std.debug.print("Error: builtin function not found: {s}\n", .{name});
+            return error.BuiltinNotFound;
+        };
+
+        if (builtin.variadic) {
+            if (args_node.args.len < builtin.args) {
+                std.debug.print("Error: builtin function {s} expects at least {d} arguments, got {d}\n", .{ name, builtin.args, args_node.args.len });
+                return error.ArgumentCountMismatch;
+            }
         } else {
-            std.debug.print("Error: unknown builtin function '{s}'\n", .{name});
-            return error.UnknownBuiltin;
+            if (builtin.args != args_node.args.len) {
+                std.debug.print("Error: builtin function {s} expects exactly {d} arguments, got {d}\n", .{ name, builtin.args, args_node.args.len });
+                return error.ArgumentCountMismatch;
+            }
+        }
+
+        if (builtin.callback) |callback| {
+            return try callback(self, args_node);
+        } else {
+            std.debug.print("Error: builtin function not found: {s}\n", .{name});
+            return error.BuiltinNotFound;
         }
     }
 
-    fn evaluatePrint(self: *Interpreter, args_node: *parse.ASTNode) anyerror!Value {
+    pub fn evaluatePrint(self: *Interpreter, args_node: *parse.ASTNode, newline: bool) anyerror!Value {
         if (args_node.* != .args) {
             std.debug.print("Error: print expects arguments\n", .{});
             return error.TypeError;
@@ -175,26 +250,29 @@ pub const Interpreter = struct {
                 std.debug.print(" ", .{});
             }
         }
-        std.debug.print("\n", .{});
-        return Value{ .nothing = {} }; // I should just return void
+        if (newline) {
+            std.debug.print("\n", .{});
+        }
+        return Value{ .nothing = {} }; // This should just be a void function
     }
 
-    fn evaluateForLoop(self: *Interpreter, loop_node: *parse.ASTNode) anyerror!Value {
-        var a = loop_node.*.for_loop.range.op.left.*.number;
-        const b = loop_node.*.for_loop.range.op.right.*.number;
+    pub fn evaluateForLoop(self: *Interpreter, loop_node: *parse.ASTNode) anyerror!Value {
+        const range_op = loop_node.*.for_loop.range.op;
+        const start_val = try self.evaluate(range_op.left);
+        const end_val = try self.evaluate(range_op.right);
 
+        if (start_val != .number or end_val != .number) {
+            std.debug.print("Error: loop range must be numbers\n", .{});
+            return error.TypeError;
+        }
+
+        const start: i64 = @intFromFloat(start_val.number);
+        const end: i64 = @intFromFloat(end_val.number);
         const iter_name = loop_node.*.for_loop.iter_name;
 
-        var iter: i32 = 1;
-        const iter_value: f64 = a;
+        if (start == end) return Value{ .nothing = {} };
 
-        if (a > b) {
-            iter = -1;
-        } else if (a < b) {
-            iter = 1;
-        } else {
-            return Value{ .nothing = {} };
-        }
+        const step: i64 = if (start < end) 1 else -1;
 
         const new_env = try self.allocator.create(env.Environment);
         new_env.* = env.Environment.init(self.allocator);
@@ -204,19 +282,19 @@ pub const Interpreter = struct {
             self.allocator.destroy(new_env);
         }
 
-        try new_env.set(iter_name, Value{ .number = iter_value });
+        try new_env.set(iter_name, Value{ .number = @floatFromInt(start) });
+        const iter_entry = new_env.get(iter_name).?;
 
         const old_env = self.environment;
         self.environment = new_env;
+        defer self.environment = old_env;
 
-        while (a != b) : (a += @as(f64, @as(f64, @floatFromInt(iter)))) {
+        var current = start;
+        while (current != end) : (current += step) {
+            iter_entry.value.*.number = @floatFromInt(current);
+
             _ = try self.evaluate(loop_node.for_loop.body);
-
-            const iter_val = new_env.*.get(iter_name).?.value.*.number;
-            try new_env.*.set(iter_name, Value{ .number = iter_val + @as(f64, @as(f64, @floatFromInt(iter))) });
         }
-
-        self.environment = old_env;
 
         return Value{ .nothing = {} };
     }
@@ -241,7 +319,7 @@ pub const Interpreter = struct {
         }
     }
 
-    fn isTruthy(self: *Interpreter, value: Value) bool {
+    inline fn isTruthy(self: *Interpreter, value: Value) bool {
         _ = self;
         switch (value) {
             .boolean => |b| return b,

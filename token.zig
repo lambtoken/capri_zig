@@ -29,6 +29,12 @@ pub const TokenType = enum {
     not,
     and_,
     or_,
+    lt,
+    gt,
+    le,
+    ge,
+    eq,
+    ne,
     for_,
     in_,
     range,
@@ -97,11 +103,7 @@ pub fn tokenize(allocator: std.mem.Allocator, buffer: []const u8) ![]Token {
     while (i < buffer.len) : (i += 1) {
         const c = buffer[i];
         // this sucks because '....' passes as 2 range ops. should return an error
-        if (c == '.' and i + 1 < buffer.len and buffer[i + 1] == '.') {
-            try tokens.append(Token{ .ttype = TokenType.range, .value = buffer[i .. i + 2] });
-            i += 1;
-            continue;
-        } else if (std.ascii.isDigit(c) or (c == '.' and i + 1 < buffer.len and buffer[i + 1] != '.' and std.ascii.isDigit(buffer[i + 1]))) {
+        if (std.ascii.isDigit(c) or (c == '.' and i + 1 < buffer.len and std.ascii.isDigit(buffer[i + 1]))) {
             const start = i;
             var has_dot = false;
             if (c == '.') {
@@ -109,9 +111,12 @@ pub fn tokenize(allocator: std.mem.Allocator, buffer: []const u8) ![]Token {
                 i += 1;
             }
 
-            while(i < buffer.len and std.ascii.isDigit(buffer[i]) or buffer[i] == '.') : (i += 1) {
+            while (i < buffer.len and (std.ascii.isDigit(buffer[i]) or buffer[i] == '.')) : (i += 1) {
                 if (buffer[i] == '.') {
                     if (!has_dot) {
+                        if (i + 1 < buffer.len and buffer[i + 1] == '.') {
+                            break;
+                        }
                         has_dot = true;
                     } else {
                         return error.InvalidNumber;
@@ -123,6 +128,10 @@ pub fn tokenize(allocator: std.mem.Allocator, buffer: []const u8) ![]Token {
             const kind = if (has_dot) TokenType.float else TokenType.int;
             try tokens.append(Token{ .ttype = kind, .value = value });
             i -= 1;
+            continue;
+        } else if (c == '.' and i + 1 < buffer.len and buffer[i + 1] == '.') {
+            try tokens.append(Token{ .ttype = TokenType.range, .value = buffer[i .. i + 2] });
+            i += 1;
             continue;
         } else if (std.ascii.isAlphabetic(c)) {
             handleKeyword(buffer, &i, &tokens) catch |err| {
@@ -174,15 +183,40 @@ pub fn tokenize(allocator: std.mem.Allocator, buffer: []const u8) ![]Token {
                 ')' => try tokens.append(Token{ .ttype = TokenType.right_paren, .value = buffer[i .. i + 1] }),
                 '{' => try tokens.append(Token{ .ttype = TokenType.left_curly, .value = buffer[i .. i + 1] }),
                 '}' => try tokens.append(Token{ .ttype = TokenType.right_curly, .value = buffer[i .. i + 1] }),
-                '=' => try tokens.append(Token{ .ttype = TokenType.assign, .value = buffer[i .. i + 1] }),
                 '|' => try tokens.append(Token{ .ttype = TokenType.pipe, .value = buffer[i .. i + 1] }),
-                '.' => {
-                    if (i + 1 < buffer.len and buffer[i + 1] == '.') {
-                        std.debug.print("we should be here\n", .{});
-                        try tokens.append(Token{ .ttype = TokenType.range, .value = buffer[i .. i + 2] });
+                '<' => {
+                    if (i + 1 < buffer.len and buffer[i + 1] == '=') {
+                        try tokens.append(Token{ .ttype = TokenType.le, .value = buffer[i .. i + 2] });
                         i += 1;
+                    } else {
+                        try tokens.append(Token{ .ttype = TokenType.lt, .value = buffer[i .. i + 1] });
                     }
                 },
+                '>' => {
+                    if (i + 1 < buffer.len and buffer[i + 1] == '=') {
+                        try tokens.append(Token{ .ttype = TokenType.ge, .value = buffer[i .. i + 2] });
+                        i += 1;
+                    } else {
+                        try tokens.append(Token{ .ttype = TokenType.gt, .value = buffer[i .. i + 1] });
+                    }
+                },
+                '=' => {
+                    if (i + 1 < buffer.len and buffer[i + 1] == '=') {
+                        try tokens.append(Token{ .ttype = TokenType.eq, .value = buffer[i .. i + 2] });
+                        i += 1;
+                    } else {
+                        try tokens.append(Token{ .ttype = TokenType.assign, .value = buffer[i .. i + 1] });
+                    }
+                },
+                '!' => {
+                    if (i + 1 < buffer.len and buffer[i + 1] == '=') {
+                        try tokens.append(Token{ .ttype = TokenType.ne, .value = buffer[i .. i + 2] });
+                        i += 1;
+                    } else {
+                        try tokens.append(Token{ .ttype = TokenType.not, .value = buffer[i .. i + 1] });
+                    }
+                },
+
                 else => {},
             }
         }

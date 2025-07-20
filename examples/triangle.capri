@@ -1,0 +1,15 @@
+// draw a triangle
+height = 10
+block = '[]'
+
+for i in 0..height + 1 {
+    for j in 0..height - i + 1 {
+        for k in 0..@len(block) / 2 {
+            @print(" ")
+        }
+    }
+    for j in i..0 {
+        @print(block)
+    }
+    @println()
+}

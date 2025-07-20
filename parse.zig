@@ -30,6 +30,14 @@ pub const Operation = enum {
     mul,
     div,
     range,
+    lt,
+    gt,
+    le,
+    ge,
+    eq,
+    ne,
+    and_,
+    or_,
 };
 
 pub const ASTNode = union(ASTNodeType) {
@@ -89,11 +97,19 @@ const Precedence = struct {
 };
 
 const precedence_table = [_]Precedence{
-    .{ .left = 1, .right = 1 }, // add
-    .{ .left = 1, .right = 1 }, // sub
-    .{ .left = 2, .right = 2 }, // mul
-    .{ .left = 2, .right = 2 }, // div
-    .{ .left = 0, .right = 0 }, // range
+    .{ .left = 8, .right = 8 }, // div
+    .{ .left = 7, .right = 7 }, // mul
+    .{ .left = 6, .right = 6 }, // add
+    .{ .left = 6, .right = 6 }, // sub
+    .{ .left = 5, .right = 5 }, // range
+    .{ .left = 4, .right = 4 }, // lt
+    .{ .left = 4, .right = 4 }, // gt
+    .{ .left = 4, .right = 4 }, // le
+    .{ .left = 4, .right = 4 }, // ge
+    .{ .left = 3, .right = 3 }, // eq
+    .{ .left = 3, .right = 3 }, // ne
+    .{ .left = 2, .right = 2 }, // and
+    .{ .left = 1, .right = 1 }, // or
 };
 
 pub const Parser = struct {
@@ -113,7 +129,7 @@ pub const Parser = struct {
 
     pub fn isBinaryOperator(tok: token.Token) bool {
         return switch (tok.ttype) {
-            .plus, .minus, .multiply, .divide, .range => true,
+            .plus, .minus, .multiply, .divide, .range, .lt, .gt, .le, .ge, .eq, .ne, .and_, .or_ => true,
             else => false,
         };
     }
@@ -125,15 +141,33 @@ pub const Parser = struct {
             .multiply => .mul,
             .divide => .div,
             .range => .range,
+            .lt => .lt,
+            .gt => .gt,
+            .le => .le,
+            .ge => .ge,
+            .eq => .eq,
+            .ne => .ne,
+            .and_ => .and_,
+            .or_ => .or_,
             else => null,
         };
     }
 
     fn precedence(op: Operation) u8 {
         return switch (op) {
-            .add, .sub => 1,
-            .mul, .div => 2,
-            .range => 0,
+            .div => 8,
+            .mul => 7,
+            .add => 6,
+            .sub => 6,
+            .range => 5,
+            .lt => 4,
+            .gt => 4,
+            .le => 4,
+            .ge => 4,
+            .eq => 3,
+            .ne => 3,
+            .and_ => 2,
+            .or_ => 1,
         };
     }
 
@@ -155,7 +189,7 @@ pub const Parser = struct {
         return null;
     }
 
-    pub fn parsePrimary(self: *Parser) !?ASTNode {
+    pub fn parsePrimary(self: *Parser) anyerror!?ASTNode {
         const tok = self.current() orelse return null;
         switch (tok.ttype) {
             .bool => {
@@ -178,6 +212,16 @@ pub const Parser = struct {
             .nothing => {
                 self.consume(1);
                 return ASTNode{ .nothing = {} };
+            },
+            .builtin => {
+                const name = tok.value;
+                self.consume(1);
+
+                if (try self.parseArgs()) |args| {
+                    return ASTNode{ .bcall = .{ .name = name, .args = args } };
+                } else {
+                    return null;
+                }
             },
             else => return null,
         }
@@ -248,7 +292,6 @@ pub const Parser = struct {
         if (try self.parseIfStmt()) |node| return node;
         if (try self.parseForLoop()) |node| return node;
         // if (try self.parseFunDef()) |node| return node;
-        // if (try self.parseBlock()) |node| return node;
         if (try self.parseExpr(0)) |node| return node;
         return null;
     }
@@ -479,6 +522,7 @@ pub const Parser = struct {
         return block_node;
     }
 
+    // TODO: This should urgently be done!
     // pub fn dumpTree(self: *Parser, node: *ASTNode, indent: usize) void {
     //     const prefix = std.fmt.allocPrint(self.allocator, "{s}", .{std.mem.repeat(" ", indent)}) catch return;
     //     defer self.allocator.free(prefix);

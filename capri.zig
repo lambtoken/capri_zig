@@ -22,6 +22,7 @@ pub fn main() !void {
     const tokens = try token.tokenize(allocator, text);
     defer allocator.free(tokens);
 
+    // Move this to a function ffs
     // for (tokens) |tok| {
     //     std.debug.print("{s}: {s}\n", .{ @tagName(tok.ttype), tok.value });
     // }

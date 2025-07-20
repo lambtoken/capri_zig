@@ -1,4 +1,4 @@
-@print("Hello, World!")
-@print(42)
-@print(true)
-@print("The answer is", 42)
+@println("Hello, World!")
+@println(42)
+@println(true)
+@println("The answer is", 42)

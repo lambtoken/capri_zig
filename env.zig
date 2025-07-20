@@ -43,6 +43,11 @@ pub const Environment = struct {
     }
 
     pub fn set(self: *Environment, name: []const u8, value: Value) !void {
+        if (self.locals.get(name)) |existing_entry| {
+            existing_entry.value.* = value;
+            return;
+        }
+
         const entry = try self.allocateValue(value);
         try self.locals.put(name, entry);
         try self.references.append(entry);

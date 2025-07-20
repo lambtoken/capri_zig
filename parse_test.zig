@@ -152,7 +152,7 @@ test "parse variable declaration" {
     const node = try parser.parseStmt();
     try std.testing.expect(node != null);
     try std.testing.expectEqual(parse.ASTNodeType.var_decl, @as(parse.ASTNodeType, node.?.*));
-    try std.testing.expectEqualStrings("mut", node.?.*.var_decl.identifier);
+    try std.testing.expectEqualStrings("x", node.?.*.var_decl.identifier);
     try std.testing.expect(node.?.*.var_decl.mut);
 
     const number = node.?.*.var_decl.right.*.number;
