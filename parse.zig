@@ -20,6 +20,8 @@ pub const ASTNodeType = enum {
     if_stmt,
     call,
     bcall,
+    while_loop,
+    break_,
     for_loop,
     return_,
 };
@@ -83,6 +85,11 @@ pub const ASTNode = union(ASTNodeType) {
         name: []const u8,
         args: *ASTNode,
     },
+    while_loop: struct {
+        condition: *ASTNode,
+        body: *ASTNode
+    },
+    break_: void,
     for_loop: struct {
         range: *ASTNode,
         body: *ASTNode,
@@ -290,8 +297,10 @@ pub const Parser = struct {
         if (try self.parseBuiltinCall()) |node| return node;
         if (try self.parseVarDecl()) |node| return node;
         if (try self.parseIfStmt()) |node| return node;
+        if (try self.parseWhileLoop()) |node| return node;
         if (try self.parseForLoop()) |node| return node;
         // if (try self.parseFunDef()) |node| return node;
+        if (try self.parseBreak()) |node| return node;
         if (try self.parseExpr(0)) |node| return node;
         return null;
     }
@@ -473,30 +482,32 @@ pub const Parser = struct {
         return args_node;
     }
 
-    pub fn parseLoop(self: *Parser) !?*ASTNode {
+    pub fn parseWhileLoop(self: *Parser) !?*ASTNode {
         const curr = self.current() orelse return null;
-        if (curr.ttype != .for_) return null;
+        if (curr.ttype != .while_) return null;
         self.consume(1);
 
-        const iter = self.current() orelse return error.ExpectedIdentifier;
-        if (iter.ttype != .word) return error.ExpectedIdentifier;
-        self.consume(1);
-
-        const in_tok = self.current() orelse return error.ExpectedIn;
-        if (in_tok.ttype != .in_) return error.ExpectedIn;
-
-        const range = try self.parseExpr(0) orelse return error.ExpectedExpression;
-
-        if (range.*.ttype != .range) return error.ExpectedRange;
+        const condition = try self.parseExpr(0) orelse return error.ExpectedExpression;
 
         const body = try self.parseBlock() orelse return error.ExpectedBlock;
 
         const loop_node = try bump.create(self.bump, ASTNode);
-        loop_node.* = .{ .for_loop = .{
-            .range = range,
+        loop_node.* = .{ .while_loop = .{
+            .condition = condition,
             .body = body,
-            .iter_name = iter.value,
         } };
+
+        return loop_node;
+    }
+
+    fn parseBreak(self: *Parser) !?*ASTNode {
+        const curr = self.current() orelse return null;
+        if (curr.ttype != .break_) return null;
+        self.consume(1);
+
+        const break_node = try bump.create(self.bump, ASTNode);
+        break_node.* = .break_;
+        return break_node;
     }
 
     pub fn parseProgram(self: *Parser) !*ASTNode {

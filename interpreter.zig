@@ -203,6 +203,12 @@ pub const Interpreter = struct {
             .for_loop => {
                 return try self.evaluateForLoop(node);
             },
+            .while_loop => {
+                return try self.evaluateWhileLoop(node);
+            },
+            .break_ => {
+                return error.LoopBreak; // Custom error to indicate loop break
+            },
             else => {
                 std.debug.print("Error: unsupported node type: {}\n", .{node.*});
                 return error.UnsupportedNode;
@@ -294,6 +300,31 @@ pub const Interpreter = struct {
             iter_entry.value.*.number = @floatFromInt(current);
 
             _ = try self.evaluate(loop_node.for_loop.body);
+        }
+
+        return Value{ .nothing = {} };
+    }
+
+    pub fn evaluateWhileLoop(self: *Interpreter, loop_node: *parse.ASTNode) anyerror!Value {
+        const new_env = try self.allocator.create(env.Environment);
+        new_env.* = env.Environment.init(self.allocator);
+        new_env.parent = self.environment;
+        defer {
+            new_env.deinit();
+            self.allocator.destroy(new_env);
+        }
+
+        const old_env = self.environment;
+        self.environment = new_env;
+        defer self.environment = old_env;
+
+        while (true) {
+            _ = self.evaluate(loop_node.while_loop.body) catch |err| {
+                switch (err) {
+                    error.LoopBreak => return Value{ .nothing = {} }, // Break out of the loop
+                    else => return err, // propagate
+                }
+            };
         }
 
         return Value{ .nothing = {} };

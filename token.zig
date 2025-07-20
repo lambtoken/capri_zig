@@ -38,6 +38,8 @@ pub const TokenType = enum {
     for_,
     in_,
     range,
+    while_,
+    break_,
     builtin,
     pipe,
     return_,
@@ -77,6 +79,8 @@ const keywords_lookup = .{
     .{ "or", TokenType.or_ },
     .{ "for", TokenType.for_ },
     .{ "in", TokenType.in_ },
+    .{ "while", TokenType.while_ },
+    .{ "break", TokenType.break_ },
     .{ "return", TokenType.return_ },
 };
 
