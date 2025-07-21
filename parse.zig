@@ -18,6 +18,8 @@ pub const ASTNodeType = enum {
     expr,
     stmt,
     if_stmt,
+    else_if_stmts,
+    else_stmt,
     call,
     bcall,
     while_loop,
@@ -75,7 +77,14 @@ pub const ASTNode = union(ASTNodeType) {
     if_stmt: struct {
         condition: *ASTNode,
         then_stmt: *ASTNode,
-        if_else_stmts: []*ASTNode,
+        else_if_stmts: ?[]*ASTNode,
+    },
+    else_if_stmts: struct {
+        condition: *ASTNode,
+        then_stmt: *ASTNode,
+    },
+    else_stmt: struct {
+        then_stmt: *ASTNode,
     },
     call: struct {
         name: []const u8,
@@ -85,10 +94,7 @@ pub const ASTNode = union(ASTNodeType) {
         name: []const u8,
         args: *ASTNode,
     },
-    while_loop: struct {
-        condition: *ASTNode,
-        body: *ASTNode
-    },
+    while_loop: struct { condition: *ASTNode, body: *ASTNode },
     break_: void,
     for_loop: struct {
         range: *ASTNode,
@@ -299,9 +305,9 @@ pub const Parser = struct {
         if (try self.parseIfStmt()) |node| return node;
         if (try self.parseWhileLoop()) |node| return node;
         if (try self.parseForLoop()) |node| return node;
-        // if (try self.parseFunDef()) |node| return node;
         if (try self.parseBreak()) |node| return node;
         if (try self.parseExpr(0)) |node| return node;
+        // if (try self.parseFunDef()) |node| return node;
         return null;
     }
 
@@ -312,19 +318,68 @@ pub const Parser = struct {
 
         const condition = try self.parseExpr(0) orelse return error.ExpectedExpression;
         const then_stmt = try self.parseBlock() orelse return error.ExpectedStatement;
-        const if_else_stmts = try self.parseIfElseStmts();
+        const else_if_stmts = try self.parseElseIfStmts();
 
         const if_node = try bump.create(self.bump, ASTNode);
         if_node.* = .{ .if_stmt = .{
             .condition = condition,
             .then_stmt = then_stmt,
-            .if_else_stmts = if_else_stmts,
+            .else_if_stmts = else_if_stmts,
         } };
         return if_node;
     }
 
-    fn parseIfElseStmts(self: *Parser) ![]*ASTNode {
-        return try bump.alloc(self.bump, *ASTNode, 0);
+    pub fn parseElseIfStmts(self: *Parser) !?[]*ASTNode {
+        var stmts = std.ArrayList(*ASTNode).init(self.allocator);
+        defer stmts.deinit();
+
+        while (true) {
+            const curr = self.current() orelse break;
+            if (curr.ttype != .else_) break;
+
+            const second = self.peek(1);
+            if (second != null and second.?.ttype == .if_) {
+                self.consume(1); // consume "else"
+                self.consume(1); // consume "if"
+
+                const condition = try self.parseExpr(0) orelse return error.ExpectedExpression;
+                const then_stmt = try self.parseBlock() orelse return error.ExpectedStatement;
+                const else_if_node = try bump.create(self.bump, ASTNode);
+                else_if_node.* = ASTNode{ .else_if_stmts = .{
+                    .condition = condition,
+                    .then_stmt = then_stmt,
+                } };
+                try stmts.append(else_if_node);
+            } else {
+                if (try self.parseElseStmt()) |node| {
+                    try stmts.append(node);
+                    break;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if (stmts.items.len == 0) return null;
+
+        const slice = try bump.alloc(self.bump, *ASTNode, stmts.items.len);
+        @memcpy(slice, stmts.items);
+
+        return slice;
+    }
+
+    pub fn parseElseStmt(self: *Parser) !?*ASTNode {
+        const curr = self.current() orelse return null;
+        if (curr.ttype != .else_) return null;
+        self.consume(1);
+
+        const then_stmt = try self.parseBlock() orelse return error.ExpectedStatement;
+
+        const else_node = try bump.create(self.bump, ASTNode);
+        else_node.* = .{ .else_stmt = .{
+            .then_stmt = then_stmt,
+        } };
+        return else_node;
     }
 
     pub inline fn isVarDecl(self: *Parser) bool {

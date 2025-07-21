@@ -1,0 +1,22 @@
+height = 3
+word = "Capri"
+width = @len(word) + 2
+
+@println()
+
+for i in 0..height {
+    for j in 0..width + 2 {
+        if i == 0 or i == height - 1 or j == 0 or j == width - 1 {
+            @print("*")
+        } else if j == 1 and i == 1 {
+           @print(" ") @print(word)
+        } else if j == width - 2 and i == 1 {
+            @print(" ")
+        } else {
+            nothing
+        }
+    }
+    @println()
+}
+
+@println()

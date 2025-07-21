@@ -341,3 +341,43 @@ test "block of expressions" {
     try std.testing.expectEqual(@as(f64, 3), three);
     try std.testing.expectEqual(@as(f64, 4), four);
 }
+
+test "if else" {
+    const _bump: *bump.Bump = try bump.newBump(std.heap.page_allocator, 1024);
+    defer bump.freeBump(_bump);
+
+    const tokens = [_]token.Token{
+        .{ .ttype = token.TokenType.if_, .value = "if" },
+        .{ .ttype = token.TokenType.int, .value = "1" },
+        .{ .ttype = token.TokenType.left_curly, .value = "{" },
+        .{ .ttype = token.TokenType.int, .value = "1" },
+        .{ .ttype = token.TokenType.right_curly, .value = "}" },
+        .{ .ttype = token.TokenType.else_, .value = "else" },
+        .{ .ttype = token.TokenType.if_, .value = "if" },
+        .{ .ttype = token.TokenType.int, .value = "2" },
+        .{ .ttype = token.TokenType.left_curly, .value = "{" },
+        .{ .ttype = token.TokenType.int, .value = "2" },
+        .{ .ttype = token.TokenType.right_curly, .value = "}" },
+        .{ .ttype = token.TokenType.else_, .value = "else" },
+        .{ .ttype = token.TokenType.left_curly, .value = "{" },
+        .{ .ttype = token.TokenType.int, .value = "2" },
+        .{ .ttype = token.TokenType.right_curly, .value = "}" },
+        .{ .ttype = token.TokenType.eof, .value = "" },
+    };
+
+    var parser = parse.Parser.init(_bump, tokens[0..]);
+    const node = try parser.parseStmt();
+    try std.testing.expect(node != null);
+
+    try std.testing.expectEqual(parse.ASTNodeType.if_stmt, @as(parse.ASTNodeType, node.?.*));
+    try std.testing.expectEqual(@as(f64, 1), node.?.*.if_stmt.condition.number);
+    try std.testing.expectEqual(parse.ASTNodeType.block, @as(parse.ASTNodeType, node.?.*.if_stmt.then_stmt.*));
+    try std.testing.expectEqual(@as(f64, 1), node.?.*.if_stmt.then_stmt.*.block[0].number);
+    try std.testing.expectEqual(parse.ASTNodeType.else_if_stmts, @as(parse.ASTNodeType, node.?.*.if_stmt.else_if_stmts.?[0].*));
+    try std.testing.expectEqual(@as(f64, 2), node.?.*.if_stmt.else_if_stmts.?[0].else_if_stmts.condition.number);
+    try std.testing.expectEqual(parse.ASTNodeType.block, @as(parse.ASTNodeType, node.?.*.if_stmt.else_if_stmts.?[0].else_if_stmts.then_stmt.*));
+    try std.testing.expectEqual(@as(f64, 2), node.?.*.if_stmt.else_if_stmts.?[0].else_if_stmts.then_stmt.*.block[0].number);
+    try std.testing.expectEqual(parse.ASTNodeType.else_stmt, @as(parse.ASTNodeType, node.?.*.if_stmt.else_if_stmts.?[1].*));
+    try std.testing.expectEqual(parse.ASTNodeType.block, @as(parse.ASTNodeType, node.?.*.if_stmt.else_if_stmts.?[1].else_stmt.then_stmt.*));
+    try std.testing.expectEqual(@as(f64, 2), node.?.*.if_stmt.else_if_stmts.?[1].else_stmt.then_stmt.*.block[0].number);
+}

@@ -23,6 +23,10 @@ pub const BuiltinType = enum {
     tan,
     sqrt,
     pow,
+    floor,
+    ceil,
+    round,
+    sleep,
 };
 
 pub const Builtins = [_]Builtin{
@@ -36,6 +40,10 @@ pub const Builtins = [_]Builtin{
     .{ .name = "tan", .args = 1, .variadic = false, .return_type = parse.ASTNodeType.number, .callback = &tan },
     .{ .name = "sqrt", .args = 1, .variadic = false, .return_type = parse.ASTNodeType.number, .callback = &sqrt },
     .{ .name = "pow", .args = 2, .variadic = false, .return_type = parse.ASTNodeType.number, .callback = &pow },
+    .{ .name = "floor", .args = 1, .variadic = false, .return_type = parse.ASTNodeType.number, .callback = &floor },
+    .{ .name = "ceil", .args = 1, .variadic = false, .return_type = parse.ASTNodeType.number, .callback = &ceil },
+    .{ .name = "round", .args = 1, .variadic = false, .return_type = parse.ASTNodeType.number, .callback = &round },
+    .{ .name = "sleep", .args = 1, .variadic = false, .return_type = parse.ASTNodeType.number, .callback = &sleep },
 };
 
 pub fn getBuiltin(name: []const u8) ?Builtin {
@@ -99,4 +107,25 @@ fn pow(self: *Interpreter, args_node: *parse.ASTNode) anyerror!Value {
     const arg1 = try self.evaluate(args_node.args[0]);
     const arg2 = try self.evaluate(args_node.args[1]);
     return Value{ .number = std.math.pow(f64, arg1.number, arg2.number) };
+}
+
+fn floor(self: *Interpreter, args_node: *parse.ASTNode) anyerror!Value {
+    const arg = try self.evaluate(args_node.args[0]);
+    return Value{ .number = std.math.floor(arg.number) };
+}
+
+fn ceil(self: *Interpreter, args_node: *parse.ASTNode) anyerror!Value {
+    const arg = try self.evaluate(args_node.args[0]);
+    return Value{ .number = std.math.ceil(arg.number) };
+}
+
+fn round(self: *Interpreter, args_node: *parse.ASTNode) anyerror!Value {
+    const arg = try self.evaluate(args_node.args[0]);
+    return Value{ .number = std.math.round(arg.number) };
+}
+
+fn sleep(self: *Interpreter, args_node: *parse.ASTNode) anyerror!Value {
+    const arg = try self.evaluate(args_node.args[0]);
+    std.time.sleep(@intFromFloat(arg.number * std.time.ns_per_ms));
+    return Value{ .nothing = {} };
 }

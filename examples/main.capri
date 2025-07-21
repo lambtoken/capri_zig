@@ -21,3 +21,7 @@ something = true
 if nothing or something {
     @println("Found something!")
 }
+
+decimal = 1.69
+rounded = @round(decimal)
+@println("Decimal: ", decimal, "Rounded: ", rounded)

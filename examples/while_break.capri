@@ -4,7 +4,8 @@ n = 10000
 while true {
     i = i + 1
     if i == n {
-        @println(i)
         break
     }
 }
+
+@println(i)

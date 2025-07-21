@@ -173,7 +173,7 @@ pub const Interpreter = struct {
             },
             .var_decl => |decl| {
                 const value = try self.evaluate(decl.right);
-                try self.environment.set(decl.identifier, value);
+                _ = try self.environment.set(decl.identifier, value);
                 return value;
             },
             .block => |block| {
@@ -183,15 +183,8 @@ pub const Interpreter = struct {
                 }
                 return result orelse Value{ .nothing = {} };
             },
-            .if_stmt => |if_stmt| {
-                const condition = try self.evaluate(if_stmt.condition);
-                if (self.isTruthy(condition)) {
-                    return try self.evaluate(if_stmt.then_stmt);
-                } else {
-                    return Value{ .nothing = {} };
-                    // TODO: Do else branching
-                    // return try self.evaluate(if_stmt.else_stmt);
-                }
+            .if_stmt => {
+                return try self.evaluateIf(node);
             },
             .bcall => |bcall| {
                 return try self.evaluateBuiltinCall(bcall.name, bcall.args);
@@ -242,6 +235,40 @@ pub const Interpreter = struct {
         }
     }
 
+    fn evaluateIf(self: *Interpreter, if_stmt: *parse.ASTNode) anyerror!Value {
+        const condition = try self.evaluate(if_stmt.*.if_stmt.condition);
+        if (self.isTruthy(condition)) {
+            return try self.evaluate(if_stmt.*.if_stmt.then_stmt);
+        } else {
+            return try self.evaluateElseIf(if_stmt.*.if_stmt.else_if_stmts);
+        }
+    }
+
+    fn evaluateElseIf(self: *Interpreter, else_if_stmt: ?[]*parse.ASTNode) anyerror!Value {
+        if (else_if_stmt == null) {
+            return Value{ .nothing = {} };
+        }
+
+        for (else_if_stmt.?) |else_if_stmt_node| {
+            switch (else_if_stmt_node.*) {
+                .else_if_stmts => {
+                    const condition = try self.evaluate(else_if_stmt_node.*.else_if_stmts.condition);
+                    if (self.isTruthy(condition)) {
+                        return try self.evaluate(else_if_stmt_node.*.else_if_stmts.then_stmt);
+                    }
+                },
+                .else_stmt => |else_stmt| {
+                    return try self.evaluate(else_stmt.then_stmt);
+                },
+                else => {
+                    std.debug.print("Error: unexpected node type in else-if: {}\n", .{else_if_stmt_node.*});
+                    return error.UnsupportedNode;
+                },
+            }
+        }
+        return Value{ .nothing = {} };
+    }
+
     pub fn evaluatePrint(self: *Interpreter, args_node: *parse.ASTNode, newline: bool) anyerror!Value {
         if (args_node.* != .args) {
             std.debug.print("Error: print expects arguments\n", .{});
@@ -288,7 +315,7 @@ pub const Interpreter = struct {
             self.allocator.destroy(new_env);
         }
 
-        try new_env.set(iter_name, Value{ .number = @floatFromInt(start) });
+        _ = try new_env.set(iter_name, Value{ .number = @floatFromInt(start) });
         const iter_entry = new_env.get(iter_name).?;
 
         const old_env = self.environment;

@@ -1,0 +1,24 @@
+width = 49
+height = 20
+
+t = .0
+
+while true {
+for i in 0..height {
+    for j in 0..width {
+        wave = @sin(j * 0.5 + t) + @cos(i * 0.7 + t * 1.5)
+        if wave > 0.5 {
+            @print("O")
+        } else if wave > 0.2 {
+            @print("o")
+        } else if wave > 0.2 {
+            @print(".")
+        } else {
+            @print(" ")
+        }
+    }
+    @println()
+}
+    @sleep(100)
+    t = t + 0.15
+}

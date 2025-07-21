@@ -8,6 +8,12 @@ pub const EnvEntry = struct {
     reachable: bool,
 };
 
+const SetResult = enum {
+    NotFound,
+    Inserted,
+    Updated,
+};
+
 pub const Environment = struct {
     locals: std.StringHashMap(*EnvEntry),
     references: std.ArrayList(*EnvEntry),
@@ -42,15 +48,26 @@ pub const Environment = struct {
         return null;
     }
 
-    pub fn set(self: *Environment, name: []const u8, value: Value) !void {
+    pub fn set(self: *Environment, name: []const u8, value: Value) !SetResult {
         if (self.locals.get(name)) |existing_entry| {
             existing_entry.value.* = value;
-            return;
+            return .Updated;
+        }
+
+        if (self.parent) |parent| {
+            const result = try parent.set(name, value);
+
+            switch (result) {
+                .NotFound => {},
+                .Inserted => return .Inserted,
+                .Updated => return .Updated,
+            }
         }
 
         const entry = try self.allocateValue(value);
         try self.locals.put(name, entry);
         try self.references.append(entry);
+        return .Inserted;
     }
 
     fn markEntry(self: *Environment, entry: *EnvEntry, mark_bool: bool) void {
