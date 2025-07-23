@@ -24,10 +24,13 @@ There was already a C version of Capri but I did not manage to finish it
 - repeat op \*\* [ ]
 - Pipe op |> [ ]
 - Table-like structure [ ]
+- Function definitions
+- Function expressions (for anonymous functions) [ ]
 - Import [ ]
 - Export [ ]
 - Capri standard library [ ]
 - User-friendly errors [ ]
+- Buffered print [ ]
 
 - Builtins [ ]
     - @args [ ]

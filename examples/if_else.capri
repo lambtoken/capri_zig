@@ -1,3 +1,5 @@
+// this program draws a frame around some text
+
 height = 3
 word = "Capri"
 width = @len(word) + 2

@@ -1,5 +1,5 @@
 // draw a triangle
-height = 10
+height = 12
 block = '[]'
 
 for i in 0..height + 1 {

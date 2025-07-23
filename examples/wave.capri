@@ -1,3 +1,6 @@
+// this is an experimental example of some wave-like animation
+// not sure if zig is buffering the output or not but we have some flickering
+
 width = 49
 height = 20
 

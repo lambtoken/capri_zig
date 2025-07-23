@@ -1,6 +1,6 @@
 # Capri Language Documentation
 
-Capri is a clean, expressive scripting language inspired by Lua, Zig and modern language design principles. Capri introduces a few unique features while keeping the learning curve low.
+Capri is a simple, expressive scripting language. It introduces a few unique features while keeping the learning curve low.
 
 ---
 
@@ -8,11 +8,12 @@ Capri is a clean, expressive scripting language inspired by Lua, Zig and modern 
 
 * [Values and Types](#values-and-types)
 * [Variables](#variables)
-* [Control Flow](#control-flow)
+* [Branching](#branching)
 * [Loops and Ranges](#loops-and-ranges)
-* [Box Structure](#box-structure)
+* [Bundle Structure](#bundle-structure)
+* [Function Definition](#function-definition)
 * [Function Call Syntax](#function-call-syntax)
-* [Builtins](#builtings)
+* [Builtins](#builtin-function)
 
 ---
 
@@ -21,11 +22,16 @@ Capri is a clean, expressive scripting language inspired by Lua, Zig and modern 
 Capri has the following basic types:
 
 * `Boolean` — `true` and `false`
-* `Number` — floating point numbers
-* `String` — double-quoted string values
-* `Box` — a dictionary data structure (like Lua tables), written with `[]`
+* `Number` — 64 bit floating point numbers
+* `String` — single or double quoted string values
+* `Array` — a vector-like data structure of any type, written with `[]`
+* `Struct` — a hashmap data structure, written with `{}` - to replace need for bundles
 * `Function` — first-class anonymous or named functions
-* `Nothing` — represents absence of a value
+* `Reference`& - for referencing primitives by address
+* `FileHandle` - used for working with files
+* `Nothing` — nothing, absence of a value
+
+Type of any data can be checked with @type builtin. It returns type as a string: 'boolean', 'number', 'string', 'array', 'struct , 'function', 'reference', 'file' or 'nothing'
 
 ---
 
@@ -40,23 +46,46 @@ Mutable variables are declared with `mut`. Reassignment is allowed without redec
 
 ---
 
-## Control Flow
+## Branching
 
 ### If / Else
 
 ```capri
 if x > 10 {
   @print("Big")
-} elif x > 5 {
+} else if x > 5 {
   @print("Medium")
 } else {
   @print("Small")
 }
 ```
 
+Parentheses are not enforced. Only {} are.
+
+
+**Capture**
+
+```capri
+If entity.alive |value| {
+    @print("Entity alive!")
+} else {
+    @print("I 've got some bad news about " .. entity.name)
+}
+```
+
+As you can see Capri uses zig-like capture.
+
+
 ---
 
 ## Loops and Ranges
+
+### While loop
+
+```capri
+while true {
+    @println("I will not fake rabies")
+}
 
 ### For Loop (Range)
 
@@ -74,35 +103,34 @@ for 10.. |i| { ... }      // down to 0
 for .. |i| { ... }        // zero-iteration loop (evaluates to nothing)
 ```
 
----
-
-## Branching
+Ranges can therefore also be used for creating empty bundles like:
 
 ```capri
-If entity.alive |value| {
-    @print("Entity alive!")
-} else {
-    @print("I 've got some bad news about " .. entity.name)
+squares = .. // same as squares = {}
+
+for i in 1..10 {
+    @push(squares, @pow(i, 2))
 }
+
+@print(squares) // 1, 4, 9, 16 ...
+
 ```
 
-As you can notice Capri uses zig-like capture.
 
-Parentheses are not enforced. Only {} are.
+## Bundle Structure (experimental)
 
-## Box Structure
 
-Boxes are the core data structure in Capri, supporting both arrays and maps:
+Bundles are the core data structure in Capri, supporting both arrays and maps:
 
 ```capri
-mut colors = ["red", "green", "blue"]
-mut user = [name = "Luna", age = 27]
+mut colors = {"red", "green", "blue"}
+mut user = {name = "Luna", age = 27}
 ```
 
 Access:
 
 ```capri
-@print(colors.0)       // "red"
+@print(colors[0])       // "red"
 @print(user.name)      // "Luna"
 ```
 
@@ -110,104 +138,822 @@ Set:
 
 ```capri
 user.age = 28
-colors.3 = "purple"
+colors[3] = "purple"
+@push(colors, "cyan")
+@insert(colors, @len(colors), "yellow")
 ```
 
-Nested Boxes:
+Removing items:
 
 ```capri
-mut config = [
-  window = [width = 800, height = 600],
+colors[1] = nothing
+@pop(colors)
+@remove(colors, 3)
+
+```
+
+
+
+Nested Bundles:
+
+```capri
+mut config = {
+  window = {width = 800, height = 600},
   fullscreen = true
-]
+}
 ```
 
-### Comma-Free Syntax
+Bundles come with predifined lifecycle callbacks.
 
-Capri allows you to omit commas between elements in a box as long as the structure remains unambiguous. This can improve readability and reduce visual clutter:
+    - __new
+    - __destroy
+    - __tostring
+
+---
+
+## Function Definition
+
+In Capri functions can be defined like this:
 
 ```capri
-mut palette = [
-  "red"
-  "green"
-  "blue"
-]
-
-mut person = [
-  name = "Aria"
-  age = 30
-  job = "Engineer"
-]
+fun printer(text) {
+    @println(text)
+}
 ```
-
-Both comma and comma-free styles are valid but can't be mixed.
-
-```capri
-mut palette = [
-  "red"
-  "green",
-  "blue"
-  "yellow"
-  "black",
-  "white,
-]
-```
-
-**This is not valid!**
 
 ---
 
 ## Function Call Syntax
 
-Capri functions can be called with or without parentheses. This applies to both user-defined and built-in functions:
+Capri functions follow the standard way of invoking.
 
 ```capri
 say_hello("Capri")
-say_hello "Capri"
-```
-
-Arguments may also be comma-free when clarity allows:
-
-```capri
-@print "Hello" "World"
-draw_square 0 0 100 200 [1 0 0] //draw a red square 
-```
-
-Use whatever you think is more readable.
-
----
-
-Here’s a new section for built-in functions and constants with the `@` prefix for Capri:
-
----
-
-## Built-in Functions and Constants
-
-Capri includes a set of built-in functions and constants, all prefixed with `@` for easy identification:
-
-### Common Built-ins
-
-| Name        | Description                     | Example                   |
-| ----------- | ------------------------------- | ------------------------- |
-| `@print`    | Prints values to the console    | `@print "Hello, Capri"`   |
-| `@floor`    | Returns the floor of a number   | `@floor 3.7  // 3`        |
-| `@ceil`     | Returns the ceiling of a number | `@ceil 3.2   // 4`        |
-| `@pi`       | Mathematical constant π         | `radius * 2 * @pi`        |
-| `@tostring` | Converts a value to a string    | `@tostring 123  // "123"` |
-| `@tonumber` | Converts a string to a number if possible. Else it returns _Nothing_ | `@tonumber '123'  // 123` |
-| `@assert` | Asserts that a condition is true. Else it stops the program and prints the message. | `@assert user.age > 0  // "Assertion failed: Age must be positive"` |
-... | more to come! | ...
-
-### Usage
-
-Built-ins can be called with or without parentheses, and support comma-free arguments when unambiguous:
-
-```capri
-@print "Radius:" radius
-area = @pi * radius * radius
-floor_value = @floor radius
 ```
 
 ---
 
-Capri is a work-in-progress language focused on clarity and flow. Its features are designed to feel intuitive and enable expressive, elegant code. Stay tuned for updates and expanded standard library features.
+
+## Builtin Function
+
+Capri includes a set of builtin functions and constants, all prefixed with `@` for easy identification:
+
+
+
+## `@args`
+
+```my-lang
+@args() -> [string]
+```
+
+Returns the list of command-line arguments passed to the program.
+
+**Example:**
+
+```my-lang
+args = @args()
+@println(args[0])
+```
+
+---
+
+## `@print`
+
+```my-lang
+@print(value: any) -> void
+```
+
+Prints the given value to standard output without a newline.
+
+**Example:**
+
+```my-lang
+@print("Hello, ")
+@print("world!")
+```
+
+---
+
+## `@println`
+
+```my-lang
+@println(value: any) -> void
+```
+
+Prints the given value followed by a newline.
+
+**Example:**
+
+```my-lang
+@println("Hello")
+@println(123)
+```
+
+---
+
+## `@prompt`
+
+```my-lang
+@prompt(message: string) -> string
+```
+
+Displays a message and waits for user input.
+
+**Example:**
+
+```my-lang
+name = @prompt("Enter your name: ")
+@println("Hello, " + name)
+```
+
+---
+
+## `@assert`
+
+```my-lang
+@assert(condition: bool, message: string) -> void
+```
+
+Crashes if the condition is false and prints the message.
+
+**Example:**
+
+```my-lang
+@assert(1 + 1 == 2, "Should never happen.")
+```
+
+---
+
+## `@error`
+
+```my-lang
+@error(message: string) -> void
+```
+
+Terminates the program with the given error message.
+
+**Example:**
+
+```my-lang
+@error("Something went wrong")
+```
+
+---
+
+## `@len`
+
+```my-lang
+@len(value: [any]) -> number
+```
+
+Returns the length of an array or string.
+
+**Example:**
+
+```my-lang
+@println(@len("hello"))     // 5
+@println(@len([1,2,3,4]))    // 4
+```
+
+---
+
+## `@split`
+
+```my-lang
+@split(input: string, delimiter: string) -> [string]
+```
+
+Splits the input string into a list of strings by delimiter. If not provided, default delimeter is " ".
+
+**Example:**
+
+```my-lang
+parts = @split("a,b,c", ",")
+@println(parts[1]) // "b"
+```
+
+---
+
+## `@trim`
+
+```my-lang
+@trim(input: string) -> string
+```
+
+Trims leading and trailing whitespace.
+
+**Example:**
+
+```my-lang
+@println(@trim("  hello  ")) // "hello"
+```
+
+---
+
+## `@toUpper`
+
+```my-lang
+@toUpper(input: string) -> string
+```
+
+Converts all characters in the string to uppercase.
+
+**Example:**
+
+```my-lang
+@println(@toUpper("abc")) // "ABC"
+```
+
+---
+
+## `@toLower`
+
+```my-lang
+@toLower(input: string) -> string
+```
+
+Converts all characters in the string to lowercase.
+
+**Example:**
+
+```my-lang
+@println(@toLower("HELLO")) // "hello"
+```
+
+---
+
+## `@toNum`
+
+```my-lang
+@toNum(input: string) -> number
+```
+
+Parses a string into a number. If fails, returns `nothing`.
+
+**Example:**
+
+```my-lang
+n = @toNum("42")
+@println(n + 1) // 43
+
+nan = @toNum("3d")
+@println(nan) // nothing
+```
+
+---
+
+## `@toStr`
+
+```my-lang
+@toStr(value: any) -> string
+```
+
+Converts a value to its string representation.
+
+**Example:**
+
+```my-lang
+@println(@toStr(123)) // "123"
+```
+
+---
+
+## `@push`
+
+```my-lang
+@push(list: [any], value: any) -> void
+```
+
+Appends an element to the list.
+
+**Example:**
+
+```my-lang
+let items = [1, 2]
+@push(items, 3)
+@println(items) // [1, 2, 3]
+```
+
+---
+
+## `@pop`
+
+```my-lang
+@pop(list: [any]) -> any
+```
+
+Removes and returns the last element of the list.
+
+**Example:**
+
+```my-lang
+let items = [1, 2, 3]
+let last = @pop(items)
+@println(last) // 3
+```
+
+---
+
+## `@insert`
+
+```my-lang
+@insert(list: [any], index: number, value: any) -> void
+```
+
+Inserts a value at the specified index.
+
+**Example:**
+
+```my-lang
+let items = [1, 3]
+@insert(items, 1, 2)
+@println(items) // [1, 2, 3]
+```
+
+---
+
+## `@remove`
+
+```my-lang
+@remove(list: [any], index: number) -> void
+```
+
+Removes the element at the specified index.
+
+**Example:**
+
+```my-lang
+let items = [1, 2, 3]
+@remove(items, 1)
+@println(items) // [1, 3]
+```
+
+---
+
+## `@pi`
+
+```my-lang
+@pi: const number
+```
+
+Mathematical constant π.
+
+**Example:**
+
+```my-lang
+@println(@pi())
+```
+
+---
+
+## `@e`
+
+```my-lang
+@e: const number
+```
+
+Mathematical constant e.
+
+**Example:**
+
+```my-lang
+@println(@e())
+```
+
+---
+
+## `@pow`
+
+```my-lang
+@pow(base: number, exponent: number) -> number
+```
+
+Raises `base` to the power of `exponent`.
+
+**Example:**
+
+```my-lang
+@println(@pow(2, 3)) // 8
+```
+
+---
+
+## `@sqrt`
+
+```my-lang
+@sqrt(x: number) -> number
+```
+
+Returns the square root of `x`.
+
+**Example:**
+
+```my-lang
+@println(@sqrt(16)) // 4
+```
+
+---
+
+## `@sin`
+
+```my-lang
+@sin(x: number) -> number
+```
+
+Returns the sine of `x` (radians).
+
+**Example:**
+
+```my-lang
+@println(@sin(@pi / 2)) // 1
+```
+
+---
+
+## `@cos`
+
+```my-lang
+@cos(x: number) -> number
+```
+
+Returns the cosine of `x` (radians).
+
+**Example:**
+
+```my-lang
+@println(@cos(0)) // 1
+```
+
+---
+
+## `@tan`
+
+```my-lang
+@tan(x: number) -> number
+```
+
+Returns the tangent of `x` (radians).
+
+**Example:**
+
+```my-lang
+@println(@tan(0)) // 0
+```
+
+---
+
+## `@round`
+
+```my-lang
+@round(x: number) -> number
+```
+
+Rounds to the nearest whole number.
+
+**Example:**
+
+```my-lang
+@println(@round(2.7)) // 3
+```
+
+---
+
+## `@floor`
+
+```my-lang
+@floor(x: number) -> number
+```
+
+Rounds down to the nearest whole number.
+
+**Example:**
+
+```my-lang
+@println(@floor(2.7)) // 2
+```
+
+---
+
+## `@ceil`
+
+```my-lang
+@ceil(x: number) -> number
+```
+
+Rounds up to the nearest whole number.
+
+**Example:**
+
+```my-lang
+@println(@ceil(2.1)) // 3
+```
+
+---
+
+## `@rand`
+
+```my-lang
+@rand() -> number
+```
+
+Returns a pseudorandom number between 0 and 1.
+
+**Example:**
+
+```my-lang
+@println(@rand())
+```
+
+---
+
+## `@randseed`
+
+```my-lang
+@randseed(seed: number) -> void
+```
+
+Sets the seed for the pseudorandom number generator.
+
+**Example:**
+
+```my-lang
+@randseed(12345)
+```
+
+---
+
+## `@time`
+
+```my-lang
+@time() -> number
+```
+
+Returns the current time in seconds since epoch.
+
+**Example:**
+
+```my-lang
+@println(@time())
+```
+
+---
+
+## `@map`
+
+```my-lang
+@map(list: [any], func: fun(any) -> any) -> [any]
+```
+
+Applies a function to each element of an array.
+
+**Example:**
+
+```my-lang
+@map([1, 2, 3], fn(x) { x + 1 }) // [2, 3, 4]
+```
+
+---
+
+## `@foldl`
+
+```my-lang
+@foldl(list: [any], init: any, func: fun(any, any) -> any) -> any
+```
+
+Reduces an array from the left.
+
+**Example:**
+
+```my-lang
+@foldl([1, 2, 3], 0, fun(a, b) { a + b }) // 6
+```
+
+---
+
+## `@foldr`
+
+```my-lang
+@foldr(list: [any], init: any, func: fn(any, any) -> any) -> any
+```
+
+Reduces an array from the right.
+
+**Example:**
+
+```my-lang
+@foldr([1, 2, 3], 0, fun(a, b) { a + b }) // 6
+```
+
+---
+
+## `@zip`
+
+```my-lang
+@zip(list1: [any], list2: [any]) -> [(any, any)]
+```
+
+Combines two lists into a list of pairs.
+
+**Example:**
+
+```my-lang
+@zip([1, 2], ["a", "b"]) // [(1, "a"), (2, "b")]
+```
+
+---
+
+## `@filter`
+
+```my-lang
+@filter(list: [any], predicate: fn(any) -> bool) -> [any]
+```
+
+Returns a list of elements that satisfy the predicate.
+
+**Example:**
+
+```my-lang
+@filter([1, 2, 3, 4], fun(x) { x % 2 == 0 }) // [2, 4]
+```
+
+---
+
+## `@any`
+
+```my-lang
+@any(list: [any], predicate: fun(any) -> bool) -> bool
+```
+
+Returns true if any element satisfies the predicate.
+
+**Example:**
+
+```my-lang
+@any([1, 2, 3], fun(x) { x > 2 }) // true
+```
+
+---
+
+## `@all`
+
+```my-lang
+@all(list: [any], predicate: fun(any) -> bool) -> bool
+```
+
+Returns true if all elements satisfy the predicate.
+
+**Example:**
+
+```my-lang
+@all([2, 4], fun(x) { x % 2 == 0 }) // true
+```
+
+---
+
+## `@scan`
+
+```my-lang
+@scan(list: [any], init: any, func: fun(any, any) -> any) -> {any}
+```
+
+Computes prefix results like a running total.
+
+**Example:**
+
+```my-lang
+@scan([1, 2, 3], 0, fun(a, b) { a + b }) // [1, 3, 6]
+```
+
+---
+
+## `@open`
+
+```my-lang
+@open(path: string, mode: string) -> FileHandle
+```
+
+Opens a file and returns a handle.
+
+**Example:**
+
+```my-lang
+file = @open("test.txt", "r")
+```
+
+---
+
+## `@read`
+
+```my-lang
+@read(file: FileHandle) -> string
+```
+
+Reads contents from a file.
+
+**Example:**
+
+```my-lang
+let content = @read(file)
+```
+
+---
+
+## `@write`
+
+```my-lang
+@write(file: FileHandle, data: string) -> void
+```
+
+Writes data to a file.
+
+**Example:**
+
+```my-lang
+@write(file, "Hello")
+```
+
+---
+
+## `@close`
+
+```my-lang
+@close(file: FileHandle) -> void
+```
+
+Closes a file handle.
+
+**Example:**
+
+```my-lang
+@close(file)
+```
+
+---
+
+## `@sleep`
+
+```my-lang
+@sleep(milisecond: number) -> void
+```
+
+Pauses execution for the specified duration.
+
+**Example:**
+
+```my-lang
+@sleep(1000)
+```
+
+---
+
+## `@winWidth`
+
+```my-lang
+@winWidth() -> number
+```
+
+Returns the width of the display or terminal.
+
+**Example:**
+
+```my-lang
+@println(@winWidth())
+```
+
+---
+
+## `@winHeight`
+
+```my-lang
+@winHeight() -> number
+```
+
+Returns the height of the display or terminal.
+
+**Example:**
+
+```my-lang
+@println(@winHeight())
+```
+
+---
+
+## `@clearScreen`
+
+```my-lang
+@clearScreen() -> void
+```
+
+Clears the screen output of the terminal.
+
+**Example:**
+
+```my-lang
+@clearScreen()
+```
+
+
+
+---
+
+Capri is a work-in-progress language. Stay tuned for updates and expanded standard library features.
