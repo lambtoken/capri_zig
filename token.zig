@@ -22,6 +22,8 @@ pub const TokenType = enum {
     right_paren,
     left_curly,
     right_curly,
+    left_bracket,
+    right_bracket,
     comma,
     quotes,
     d_quotes,

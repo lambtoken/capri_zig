@@ -218,7 +218,7 @@ test "parse args" {
     };
 
     var parser = parse.Parser.init(_bump, tokens[0..]);
-    const args = try parser.parseArgs();
+    const args = try parser.parseExprList();
     try std.testing.expect(args != null);
     try std.testing.expectEqual(@as(usize, 2), args.?.args.len);
     try std.testing.expectEqual(@as(f64, 1), args.?.args[0].number);
@@ -380,4 +380,56 @@ test "if else" {
     try std.testing.expectEqual(parse.ASTNodeType.else_stmt, @as(parse.ASTNodeType, node.?.*.if_stmt.else_if_stmts.?[1].*));
     try std.testing.expectEqual(parse.ASTNodeType.block, @as(parse.ASTNodeType, node.?.*.if_stmt.else_if_stmts.?[1].else_stmt.then_stmt.*));
     try std.testing.expectEqual(@as(f64, 2), node.?.*.if_stmt.else_if_stmts.?[1].else_stmt.then_stmt.*.block[0].number);
+}
+
+test "array creation" {
+    const _bump: *bump.Bump = try bump.newBump(std.heap.page_allocator, 1024);
+    defer bump.freeBump(_bump);
+
+    const tokens = [_]token.Token{
+        .{ .ttype = token.TokenType.left_bracket, .value = "[" },
+        .{ .ttype = token.TokenType.int, .value = "1" },
+        .{ .ttype = token.TokenType.comma, .value = "," },
+        .{ .ttype = token.TokenType.int, .value = "2" },
+        .{ .ttype = token.TokenType.comma, .value = "," },
+        .{ .ttype = token.TokenType.int, .value = "3" },
+        .{ .ttype = token.TokenType.right_bracket, .value = "]" },
+        .{ .ttype = token.TokenType.eof, .value = "" },
+    };
+
+    var parser = parse.Parser.init(_bump, tokens[0..]);
+    const node = try parser.parseExpr(0);
+    try std.testing.expect(node != null);
+    try std.testing.expectEqual(parse.ASTNodeType.array, @as(parse.ASTNodeType, node.?.*));
+    try std.testing.expectEqual(@as(f64, 1), node.?.*.array.elements[0].number);
+    try std.testing.expectEqual(@as(f64, 2), node.?.*.array.elements[1].number);
+    try std.testing.expectEqual(@as(f64, 3), node.?.*.array.elements[2].number);
+}
+
+test "array access" {
+    const _bump: *bump.Bump = try bump.newBump(std.heap.page_allocator, 1024);
+    defer bump.freeBump(_bump);
+
+    const tokens = [_]token.Token{
+        .{ .ttype = token.TokenType.word, .value = "arr" },
+        .{ .ttype = token.TokenType.left_bracket, .value = "[" },
+        .{ .ttype = token.TokenType.int, .value = "1" },
+        .{ .ttype = token.TokenType.right_bracket, .value = "]" },
+        .{ .ttype = token.TokenType.left_bracket, .value = "[" },
+        .{ .ttype = token.TokenType.int, .value = "2" },
+        .{ .ttype = token.TokenType.right_bracket, .value = "]" },
+        .{ .ttype = token.TokenType.left_bracket, .value = "[" },
+        .{ .ttype = token.TokenType.int, .value = "3" },
+        .{ .ttype = token.TokenType.right_bracket, .value = "]" },
+        .{ .ttype = token.TokenType.eof, .value = "" },
+    };
+
+    var parser = parse.Parser.init(_bump, tokens[0..]);
+    const node = try parser.parseExpr(0);
+    try std.testing.expect(node != null);
+    try std.testing.expectEqual(parse.ASTNodeType.array_access, @as(parse.ASTNodeType, node.?.*));
+    try std.testing.expectEqualStrings("arr", node.?.*.array_access.array_name);
+    try std.testing.expectEqual(@as(f64, 1), node.?.*.array_access.indices[0].number);
+    try std.testing.expectEqual(@as(f64, 2), node.?.*.array_access.indices[1].number);
+    try std.testing.expectEqual(@as(f64, 3), node.?.*.array_access.indices[2].number);
 }

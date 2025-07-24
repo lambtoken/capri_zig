@@ -26,6 +26,8 @@ pub const ASTNodeType = enum {
     break_,
     for_loop,
     return_,
+    array,
+    array_access,
 };
 
 pub const Operation = enum {
@@ -102,6 +104,13 @@ pub const ASTNode = union(ASTNodeType) {
         iter_name: []const u8,
     },
     return_: *ASTNode,
+    array: struct {
+        elements: []*ASTNode,
+    },
+    array_access: struct {
+        array_name: []const u8,
+        indices: []*ASTNode,
+    },
 };
 
 const Precedence = struct {
@@ -219,6 +228,16 @@ pub const Parser = struct {
                 return ASTNode{ .string = tok.value };
             },
             .word => {
+                if (self.peek(1) orelse null) |bracket_maybe| {
+                    if (bracket_maybe.ttype == .left_bracket) {
+                        if (try self.parseArrayAccess(tok.value)) |access_node| {
+                            return access_node.*;
+                        } else {
+                            return error.ExpectedExpression;
+                        }
+                    }
+                }
+
                 self.consume(1);
                 return ASTNode{ .identifier = tok.value };
             },
@@ -230,8 +249,15 @@ pub const Parser = struct {
                 const name = tok.value;
                 self.consume(1);
 
-                if (try self.parseArgs()) |args| {
+                if (try self.parseExprList()) |args| {
                     return ASTNode{ .bcall = .{ .name = name, .args = args } };
+                } else {
+                    return null;
+                }
+            },
+            .left_bracket => {
+                if (try self.parseArray()) |array_node| {
+                    return array_node.*;
                 } else {
                     return null;
                 }
@@ -502,19 +528,19 @@ pub const Parser = struct {
         const name = curr.value;
         self.consume(1);
 
-        const args = try self.parseArgs() orelse return error.ExpectedArgs;
+        const args = try self.parseExprList() orelse return error.ExpectedArgs;
         const call_node = try bump.create(self.bump, ASTNode);
         call_node.* = .{ .bcall = .{ .name = name, .args = args } };
         return call_node;
     }
 
-    pub fn parseArgs(self: *Parser) !?*ASTNode {
+    pub fn parseExprList(self: *Parser) !?*ASTNode {
         const curr = self.current() orelse return null;
         if (curr.ttype != .left_paren) return null;
         self.consume(1);
 
-        var args = std.ArrayList(*ASTNode).init(self.allocator);
-        defer args.deinit();
+        var exprs = std.ArrayList(*ASTNode).init(self.allocator);
+        defer exprs.deinit();
 
         while (true) {
             const tok = self.current() orelse return error.UnexpectedEOF;
@@ -525,12 +551,12 @@ pub const Parser = struct {
                 continue;
             }
             const arg = try self.parseExpr(0) orelse return error.ExpectedExpression;
-            try args.append(arg);
+            try exprs.append(arg);
         }
         self.consume(1);
 
-        const slice = try bump.alloc(self.bump, *ASTNode, args.items.len);
-        @memcpy(slice, args.items);
+        const slice = try bump.alloc(self.bump, *ASTNode, exprs.items.len);
+        @memcpy(slice, exprs.items);
 
         const args_node = try bump.create(self.bump, ASTNode);
         args_node.* = .{ .args = slice };
@@ -563,6 +589,77 @@ pub const Parser = struct {
         const break_node = try bump.create(self.bump, ASTNode);
         break_node.* = .break_;
         return break_node;
+    }
+
+    fn parseArray(self: *Parser) anyerror!?*ASTNode {
+        const curr = self.current() orelse return null;
+        if (curr.ttype != .left_bracket) return null;
+        self.consume(1);
+
+        var exprs = std.ArrayList(*ASTNode).init(self.allocator);
+        defer exprs.deinit();
+
+        // change parseExprList to not expect parens
+        while (true) {
+            const tok = self.current() orelse return error.UnexpectedEOF;
+            if (tok.ttype == .right_bracket) break;
+
+            if (tok.ttype == .comma) {
+                self.consume(1);
+                continue;
+            }
+
+            const element = try self.parseExpr(0) orelse return error.ExpectedExpression;
+            try exprs.append(element);
+        }
+
+        const right_bracket = self.current() orelse return error.ExpectedRightBracket;
+        if (right_bracket.ttype != .right_bracket) return error.ExpectedRightBracket;
+        self.consume(1);
+
+        const slice = try bump.alloc(self.bump, *ASTNode, exprs.items.len);
+        @memcpy(slice, exprs.items);
+
+        const array_node = try bump.create(self.bump, ASTNode);
+        array_node.* = .{
+            .array = .{
+                .elements = slice,
+            },
+        };
+        return array_node;
+    }
+
+    fn parseArrayAccess(self: *Parser, identifier: []const u8) anyerror!?*ASTNode {
+        self.consume(1);
+
+        var indices = std.ArrayList(*ASTNode).init(self.allocator);
+        defer indices.deinit();
+
+        while (true) {
+            const curr = self.current() orelse break;
+            if (curr.ttype != .left_bracket) break;
+            self.consume(1);
+
+            const index = try self.parseExpr(0) orelse return error.ExpectedExpression;
+            const right_bracket = self.current() orelse return error.ExpectedRightBracket;
+            if (right_bracket.ttype != .right_bracket) return error.ExpectedRightBracket;
+            self.consume(1); // consume the right bracket
+            try indices.append(index);
+        }
+
+        if (indices.items.len == 0) return error.ExpectedExpression;
+
+        const slice = try bump.alloc(self.bump, *ASTNode, indices.items.len);
+        @memcpy(slice, indices.items);
+
+        const access_node = try bump.create(self.bump, ASTNode);
+        access_node.* = .{
+            .array_access = .{
+                .array_name = identifier,
+                .indices = slice,
+            },
+        };
+        return access_node;
     }
 
     pub fn parseProgram(self: *Parser) !*ASTNode {
