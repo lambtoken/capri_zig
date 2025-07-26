@@ -1,0 +1,22 @@
+// concat any 2 values into a string
+
+fun concat_any(a, b) {
+    if @type(a) != 'string' { a = @tostring(a) }
+    if @type(b) != 'string' { b = @tostring(b) }
+
+    return a ++ b
+}
+
+@println(concat(19, 96))
+@println(concat("ab", "cd"))
+@println(concat("true", "false"))
+
+
+// recursion
+
+fun factorial(n) {
+    if n <= 1 { return 1 }
+    return n * factorial(n - 1)
+}
+
+@println("Factorial of 6 is:", factorial(6))
